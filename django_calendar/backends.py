@@ -1,3 +1,4 @@
+from collections import Iterable
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.importlib import import_module
@@ -6,29 +7,68 @@ from django_calendar.models import Event
 
 
 class BaseBackend(object):
-    def get_for_object(self, content_object):
-        raise NotImplementedError()
+    """
+    This backend is a simple backend to Django's ORM.
+    If you want to change the model you need to extend this class and change the model attribute.
 
-    def get_for_range(self, from_date, to_date, content_object=None):
-        raise NotImplementedError()
+    If you want to have another type of database you can extend this backend and override the `get_events`
+    and the `create_event` methods with your implementation to your database.
+    """
 
-    def create(self, **kwargs):
-        raise NotImplementedError()
+    model = Event
 
+    def get_events(self, from_date=None, to_date=None, owner=None):
+        """
+        Gets all <Event> filtered with the arguments.
 
-class ORMBackend(BaseBackend):
-    def get_for_object(self, content_object):
-        return Event.objects.filter(content_object=content_object)
+        :param from_date: From this date.
+        :type from_date: datetime.datetime
+        :param to_date: To this date, not including this date.
+        :type to_date: datetime.datetime
+        :param owner: The owner to filter on.
+        :type owner: Model
+        :returns: An iterable containing events.
+        :rtype: collections.Iterable
+        """
+        kwargs = {}
 
-    def get_for_range(self, from_date, to_date, content_object=None):
-        return Event.objects.filter(start_datetime__range=[from_date, to_date], connections=content_object)
+        if from_date and to_date:
+            kwargs['start_datetime__range'] = [from_date, to_date]
 
-    def create(self, **kwargs):
-        return Event.objects.create(**kwargs)
+        if owner:
+            if isinstance(owner, Iterable):
+                kwargs['owner__in'] = owner
+            else:
+                kwargs['owner'] = owner
+
+        return self.model.objects.filter(**kwargs)
+
+    def create_event(self, start_datetime, end_datetime, owner=None, **kwargs):
+        """
+        Cretes an event.
+
+        :param start_datetime: The date and time for the start of the event.
+        :type start_datetime: datetime.datetime
+        :param end_datetime: The date and time for the end of the event.
+        :type end_datetime: datetime.datetime
+        :param connections: An iterable of objects connected to this event.
+        :returns: An event object.
+        :rtype: Event
+        """
+        if owner:
+            kwargs['owner'] = owner
+
+        return self.model.objects.create(
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            **kwargs
+        )
 
 
 def get_backend():
     """
+    This method gets the correct backend from `CALENDAR_BACKEND` in your settings file.
+
     :rtype: BaseBackend
     """
     backend_path = settings.CALENDAR_BACKEND
@@ -42,6 +82,7 @@ def get_backend():
     try:
         backend_module = sys.modules[backend_modulename]
     except KeyError:
+        # ok, then import it.
         try:
             backend_module = import_module(backend_modulename)
         except ImportError as e:

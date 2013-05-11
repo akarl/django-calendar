@@ -1,32 +1,30 @@
-"""
-This file demonstrates writing tests using the unittest module. These will pass
-when you run "manage.py test".
-
-Replace this with more appropriate tests for your application.
-"""
+from collections import Iterable
 from datetime import timedelta
-from django.db.models.query import QuerySet
-
 from django.test import TestCase
 from django.utils import timezone
 from django_calendar import api
 from django_calendar.api import get_backend
-from django_calendar.backends import BaseBackend
 
 
-class ORMTest(TestCase):
+class CalendarTests(TestCase):
     def test_get_backend(self):
         backend = get_backend()
-        self.assertTrue(isinstance(backend, BaseBackend))
+        self.assertTrue(hasattr(backend, 'create_event'))
+        self.assertTrue(hasattr(backend, 'get_events'))
 
-    def test_api_range(self):
-        events = api.get_for_range(
+    def test_api(self):
+        event = api.create_event(
+            start_datetime=timezone.now() + timedelta(days=2),
+            end_datetime=timezone.now() + timedelta(days=2, hours=1),
+        )
+
+        self.assertTrue(event)
+
+        events = api.get_events(
             from_date=timezone.now(),
             to_date=timezone.now() + timedelta(days=7)
         )
 
-        self.assertTrue(isinstance(events, QuerySet))
+        self.assertTrue(isinstance(events, Iterable))
+        self.assertTrue(len(events) > 0)
 
-    def test_api_create(self):
-        raise NotImplementedError()
-        #event = api.create()
